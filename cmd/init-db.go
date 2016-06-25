@@ -13,7 +13,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/Sirupsen/logrus"
+	log "github.com/Sirupsen/logrus"
 	"github.com/bobisme/RestApiProject/conf"
 	_ "github.com/mattn/go-sqlite3" // load sqlite3 suppor
 	"github.com/tucnak/climax"
@@ -31,7 +31,7 @@ func init() {
 	var err error
 	dataDir, err = filepath.Abs(path.Join(path.Dir(filename), "../data"))
 	if err != nil {
-		logrus.Fatalln(err)
+		log.Fatalln(err)
 	}
 	schemaFilename = path.Join(dataDir, "schema.sql")
 }
@@ -80,7 +80,6 @@ func createDb(filename string, force bool) error {
 	defer db.Close()
 
 	// execure schema
-	logrus.Debugln("RUN SCHEMA: \n", schema)
 	_, err = db.Exec(schema)
 	if err != nil {
 		return fmt.Errorf("Could not execute schema: %s", err)
@@ -151,7 +150,7 @@ func initDB(ctx climax.Context) int {
 
 	err := createDb(cfg.DBPath, ctx.Is("force-recreate-database"))
 	if err != nil {
-		logrus.Errorln(err)
+		log.Errorln(err)
 		return 1
 	}
 
