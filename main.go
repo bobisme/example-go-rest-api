@@ -8,5 +8,6 @@ import (
 func main() {
 	cli := climax.New("rest-api")
 	cli.AddCommand(cmd.GenerateConfig)
+	cli.AddCommand(cmd.InitDB)
 	cli.Run()
 }
