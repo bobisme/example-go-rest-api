@@ -2,12 +2,16 @@ package cmd
 
 import (
 	"database/sql"
+	"encoding/csv"
 	"fmt"
 	"io/ioutil"
+	"math"
 	"os"
 	"path"
 	"path/filepath"
 	"runtime"
+	"strconv"
+	"time"
 
 	"github.com/Sirupsen/logrus"
 	"github.com/bobisme/RestApiProject/conf"
@@ -18,6 +22,10 @@ import (
 var dataDir string
 var schemaFilename string
 
+func deg2rad(degrees float64) float64 {
+	return degrees * math.Pi / 180
+}
+
 func init() {
 	_, filename, _, _ := runtime.Caller(1)
 	var err error
@@ -26,6 +34,21 @@ func init() {
 		logrus.Fatalln(err)
 	}
 	schemaFilename = path.Join(dataDir, "schema.sql")
+}
+
+func loadCSV(filename string) ([][]string, error) {
+	f, err := os.Open(path.Join(dataDir, filename))
+	defer f.Close()
+	if err != nil {
+		return nil, fmt.Errorf("could open data file: %s", err)
+	}
+	reader := csv.NewReader(f)
+	return reader.ReadAll()
+}
+
+// shortcut for fmt.Errorf...
+func quickErr(fmtString string, err error) error {
+	return fmt.Errorf("Could not read schema: %s", err)
 }
 
 func createDb(filename string, force bool) error {
@@ -45,14 +68,14 @@ func createDb(filename string, force bool) error {
 	// load schema
 	schemaBytes, err := ioutil.ReadFile(schemaFilename)
 	if err != nil {
-		return fmt.Errorf("Could not read schema: %s", err.Error())
+		return fmt.Errorf("Could not read schema: %s", err)
 	}
 	schema := string(schemaBytes)
 
 	// connect to database
 	db, err := sql.Open("sqlite3", filename)
 	if err != nil {
-		return fmt.Errorf("Could not open database: %s", err.Error())
+		return fmt.Errorf("Could not open database: %s", err)
 	}
 	defer db.Close()
 
@@ -60,8 +83,65 @@ func createDb(filename string, force bool) error {
 	logrus.Debugln("RUN SCHEMA: \n", schema)
 	_, err = db.Exec(schema)
 	if err != nil {
-		return fmt.Errorf("Could not execute schema: %s", err.Error())
+		return fmt.Errorf("Could not execute schema: %s", err)
 	}
+
+	// this is just a cheat because all the initial date-times are the same
+	// if they actually varied, I would probably use the time.Parse func
+	marchFirst := time.Date(2015, time.Month(3), 1, 0, 0, 0, 0, time.UTC)
+
+	stateData, err := loadCSV("State.csv")
+	if err != nil {
+		return fmt.Errorf("Could not load state data: %s", err)
+	}
+	for _, record := range stateData[1:] {
+		_, err = db.Exec(
+			`INSERT INTO states (name, abbrev, created_at, modified_at)
+			VALUES (?, ?, ?, ?)`, record[0], record[1], marchFirst, marchFirst)
+		if err != nil {
+			return err
+		}
+	}
+
+	cityData, err := loadCSV("City.csv")
+	if err != nil {
+		return fmt.Errorf("Could not load city data: %s", err)
+	}
+	for _, record := range cityData[1:] {
+		lat, err := strconv.ParseFloat(record[3], 64)
+		lon, err := strconv.ParseFloat(record[4], 64)
+		if err != nil {
+			return fmt.Errorf("Could not convert lat/lon to float: %s", err)
+		}
+		_, err = db.Exec(
+			`INSERT INTO cities (
+				name, state_id, lat, lon, lat_sin, lat_cos, lon_sin, lon_cos,
+				created_at, modified_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			record[0], record[1], lat, lon,
+			math.Sin(deg2rad(lat)), math.Cos(deg2rad(lat)),
+			math.Sin(deg2rad(lon)), math.Cos(deg2rad(lon)),
+			marchFirst, marchFirst)
+		if err != nil {
+			return err
+		}
+	}
+
+	userData, err := loadCSV("User.csv")
+	if err != nil {
+		return fmt.Errorf("Could not load user data: %s", err)
+	}
+	for _, record := range userData[1:] {
+		_, err = db.Exec(
+			`INSERT INTO users (
+				first_name, last_name, created_at, modified_at)
+			VALUES (?, ?, ?, ?)`,
+			record[0], record[1], marchFirst, marchFirst)
+		if err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
