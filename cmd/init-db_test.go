@@ -18,14 +18,14 @@ var _ = Describe("InitDB", func() {
 
 		It("will create the database file", func() {
 			os.Remove("test-database.db")
-			Ω(createDb("test-database.db", false)).Should(Succeed())
+			Ω(CreateDb("test-database.db", false)).Should(Succeed())
 		})
 
 		It("errors if database exists", func() {
 			f, err := os.Create("test-database.db")
 			f.Close()
 			Ω(err).ShouldNot(HaveOccurred())
-			err = createDb("test-database.db", false)
+			err = CreateDb("test-database.db", false)
 			Ω(err).Should(HaveOccurred())
 		})
 
@@ -33,14 +33,14 @@ var _ = Describe("InitDB", func() {
 			f, err := os.Create("test-database.db")
 			f.Close()
 			Ω(err).ShouldNot(HaveOccurred())
-			err = createDb("test-database.db", true)
+			err = CreateDb("test-database.db", true)
 			Ω(err).ShouldNot(HaveOccurred())
 		})
 
 		Context("schema", func() {
 			var db *sql.DB
 			BeforeEach(func() {
-				Ω(createDb("test-database.db", true)).Should(Succeed())
+				Ω(CreateDb("test-database.db", true)).Should(Succeed())
 				Ω(loadInitalData("test-database.db")).Should(Succeed())
 				db, _ = sql.Open("sqlite3", "test-database.db")
 			})

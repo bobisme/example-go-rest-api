@@ -5,7 +5,6 @@ import (
 	"encoding/csv"
 	"fmt"
 	"io/ioutil"
-	"math"
 	"os"
 	"path"
 	"path/filepath"
@@ -15,7 +14,8 @@ import (
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/bobisme/RestApiProject/conf"
-	_ "github.com/mattn/go-sqlite3" // load sqlite3 suppor
+	"github.com/bobisme/RestApiProject/geo"
+	_ "github.com/mattn/go-sqlite3" // load sqlite3 support
 	"github.com/tucnak/climax"
 )
 
@@ -26,10 +26,6 @@ var (
 	// if they actually varied, I would probably use the time.Parse func
 	marchFirst = time.Date(2015, time.Month(3), 1, 0, 0, 0, 0, time.UTC)
 )
-
-func deg2rad(degrees float64) float64 {
-	return degrees * math.Pi / 180
-}
 
 func init() {
 	_, filename, _, _ := runtime.Caller(1)
@@ -59,14 +55,16 @@ func quickErr(fmtString string, err error) error {
 // CreateInitialDatabase is a utility function to create a new database and
 // load all the initial csv data
 func CreateInitialDatabase(filename string) error {
-	err := createDb(filename, false)
+	err := CreateDb(filename, false)
 	if err != nil {
 		return err
 	}
 	return loadInitalData(filename)
 }
 
-func createDb(filename string, force bool) error {
+// CreateDb will create the database and load the initial schema.
+// It will error if the database already exists, unless `force` is `true`
+func CreateDb(filename string, force bool) error {
 	// if the database exists, and is not being forced, just quit
 	_, err := os.Stat(filename)
 	if err == nil && !force {
@@ -134,14 +132,15 @@ func loadInitalData(filename string) error {
 		if err != nil {
 			return fmt.Errorf("Could not convert lat/lon to float: %s", err)
 		}
+
+		latSin, latCos, lonSin, lonCos := geo.LatLonSinCos(lat, lon)
 		_, err = db.Exec(
 			`INSERT INTO cities (
 				name, state_id, lat, lon, lat_sin, lat_cos, lon_sin, lon_cos,
 				created_at, updated_at)
 			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			record[0], record[1], lat, lon,
-			math.Sin(deg2rad(lat)), math.Cos(deg2rad(lat)),
-			math.Sin(deg2rad(lon)), math.Cos(deg2rad(lon)),
+			latSin, latCos, lonSin, lonCos,
 			marchFirst, marchFirst)
 		if err != nil {
 			return err
@@ -170,7 +169,7 @@ func initDB(ctx climax.Context) int {
 	handleDebugging(ctx)
 	cfg := conf.LoadFile(getConfigPath(ctx))
 
-	err := createDb(cfg.DBPath, ctx.Is("force-recreate-database"))
+	err := CreateDb(cfg.DBPath, ctx.Is("force-recreate-database"))
 	if err != nil {
 		log.Errorln(err)
 		return 1
