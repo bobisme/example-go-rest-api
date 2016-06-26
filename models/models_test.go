@@ -3,12 +3,15 @@ package models_test
 import (
 	"time"
 
+	"golang.org/x/crypto/bcrypt"
+
 	"github.com/bobisme/RestApiProject/cmd"
 	. "github.com/bobisme/RestApiProject/models"
 
 	"os"
 
 	"database/sql"
+
 	"github.com/jinzhu/gorm"
 	_ "github.com/mattn/go-sqlite3" // load sqlite3 support
 	. "github.com/onsi/ginkgo"
@@ -189,7 +192,7 @@ var _ = Describe("Models", func() {
 		})
 
 		It("loads password_hash correctly", func() {
-			Ω(snow.PasswordHash).Should(Equal("HASHNOTTESTEDHERE"))
+			Ω(snow.PasswordHash).Should(Equal([]byte("HASHNOTTESTEDHERE")))
 		})
 
 		It("loads created correctly", func() {
@@ -202,6 +205,43 @@ var _ = Describe("Models", func() {
 
 		It("loads deleted correctly", func() {
 			Ω(snow.Model.DeletedAt).Should(BeNil())
+		})
+	})
+
+	Context("User passwords", func() {
+		var daeny User
+
+		BeforeEach(func() {
+			daeny = User{
+				FirstName: "Daenerys",
+				LastName:  "Targaryen",
+				Email:     "mhysa@khaleesi.org",
+			}
+			db.Create(&daeny)
+		})
+
+		AfterEach(func() {
+			db.Delete(&daeny)
+		})
+
+		It("doesn't take blank passwords", func() {
+			Ω(SetPassword(db, &daeny, "")).ShouldNot(Succeed())
+		})
+
+		It("sets hashes", func() {
+			Ω(SetPassword(db, &daeny, "drogon84")).Should(Succeed())
+			var u User
+			db.Where("email = ?", "mhysa@khaleesi.org").First(&u)
+			Ω(bcrypt.CompareHashAndPassword(
+				u.PasswordHash, []byte("drogon84"))).Should(Succeed())
+		})
+
+		It("checks passwords", func() {
+			Ω(SetPassword(db, &daeny, "drogon84")).Should(Succeed())
+			var u User
+			db.Where("email = ?", "mhysa@khaleesi.org").First(&u)
+			Ω(CheckPassword(db, &u, "drogon84")).Should(Succeed())
+			Ω(CheckPassword(db, &u, "drogon85")).ShouldNot(Succeed())
 		})
 	})
 })
