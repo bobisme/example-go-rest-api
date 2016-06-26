@@ -10,8 +10,6 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var marchFirst = time.Date(2015, time.Month(3), 1, 0, 0, 0, 0, time.UTC)
-
 var _ = Describe("InitDB", func() {
 	Describe("createDb", func() {
 		AfterEach(func() {
@@ -20,8 +18,7 @@ var _ = Describe("InitDB", func() {
 
 		It("will create the database file", func() {
 			os.Remove("test-database.db")
-			err := createDb("test-database.db", false)
-			Ω(err).ShouldNot(HaveOccurred())
+			Ω(createDb("test-database.db", false)).Should(Succeed())
 		})
 
 		It("errors if database exists", func() {
@@ -44,6 +41,7 @@ var _ = Describe("InitDB", func() {
 			var db *sql.DB
 			BeforeEach(func() {
 				Ω(createDb("test-database.db", true)).Should(Succeed())
+				Ω(loadInitalData("test-database.db")).Should(Succeed())
 				db, _ = sql.Open("sqlite3", "test-database.db")
 			})
 
@@ -88,7 +86,7 @@ var _ = Describe("InitDB", func() {
 					Created, Modified time.Time
 				}{}
 				err := db.QueryRow(
-					`SELECT name, abbrev, created_at, modified_at
+					`SELECT name, abbrev, created_at, updated_at
 					FROM states WHERE id=1`,
 				).Scan(&state.Name, &state.Abbrev, &state.Created, &state.Modified)
 				Ω(err).ShouldNot(HaveOccurred())
@@ -108,7 +106,7 @@ var _ = Describe("InitDB", func() {
 				err := db.QueryRow(
 					`SELECT name, state_id, lat, lon,
 					lat_sin, lat_cos, lon_sin, lon_cos,
-					created_at, modified_at
+					created_at, updated_at
 					FROM cities WHERE id=1`,
 				).Scan(
 					&d.name, &d.stateID, &d.lat, &d.lon,
@@ -135,7 +133,7 @@ var _ = Describe("InitDB", func() {
 				}{}
 				err := db.QueryRow(
 					`SELECT first_name, last_name,
-					created_at, modified_at, deleted_at
+					created_at, updated_at, deleted_at
 					FROM users WHERE id=1`,
 				).Scan(
 					&d.firstName, &d.lastName,

@@ -4,7 +4,7 @@ CREATE TABLE states (
     abbrev CHAR(2),
 
     created_at DATETIME,
-    modified_at DATETIME,
+    updated_at DATETIME,
     -- let's use deleted_at to render a row "deleted", but keep it around for
     -- statistical use
     deleted_at DATETIME NULL
@@ -23,7 +23,7 @@ CREATE TABLE cities (
     lon_cos REAL,
 
     created_at DATETIME,
-    modified_at DATETIME,
+    updated_at DATETIME,
     deleted_at DATETIME NULL,
 
     FOREIGN KEY(state_id) REFERENCES states(id)
@@ -38,7 +38,7 @@ CREATE TABLE users (
     password_hash TEXT,
 
     created_at DATETIME,
-    modified_at DATETIME,
+    updated_at DATETIME,
     deleted_at DATETIME NULL
 );
 
@@ -58,6 +58,6 @@ CREATE TABLE visits (
 
     created_at DATETIME,
     -- modified won't be used, but it's here for consitency and future use
-    modified_at DATETIME,
+    updated_at DATETIME,
     deleted_at DATETIME NULL
 );

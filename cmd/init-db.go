@@ -19,8 +19,13 @@ import (
 	"github.com/tucnak/climax"
 )
 
-var dataDir string
-var schemaFilename string
+var (
+	dataDir        string
+	schemaFilename string
+	// this is just a cheat because all the initial date-times are the same
+	// if they actually varied, I would probably use the time.Parse func
+	marchFirst = time.Date(2015, time.Month(3), 1, 0, 0, 0, 0, time.UTC)
+)
 
 func deg2rad(degrees float64) float64 {
 	return degrees * math.Pi / 180
@@ -49,6 +54,16 @@ func loadCSV(filename string) ([][]string, error) {
 // shortcut for fmt.Errorf...
 func quickErr(fmtString string, err error) error {
 	return fmt.Errorf("Could not read schema: %s", err)
+}
+
+// CreateInitialDatabase is a utility function to create a new database and
+// load all the initial csv data
+func CreateInitialDatabase(filename string) error {
+	err := createDb(filename, false)
+	if err != nil {
+		return err
+	}
+	return loadInitalData(filename)
 }
 
 func createDb(filename string, force bool) error {
@@ -85,9 +100,16 @@ func createDb(filename string, force bool) error {
 		return fmt.Errorf("Could not execute schema: %s", err)
 	}
 
-	// this is just a cheat because all the initial date-times are the same
-	// if they actually varied, I would probably use the time.Parse func
-	marchFirst := time.Date(2015, time.Month(3), 1, 0, 0, 0, 0, time.UTC)
+	return nil
+}
+
+func loadInitalData(filename string) error {
+	// connect to database
+	db, err := sql.Open("sqlite3", filename)
+	if err != nil {
+		return fmt.Errorf("Could not open database: %s", err)
+	}
+	defer db.Close()
 
 	stateData, err := loadCSV("State.csv")
 	if err != nil {
@@ -95,7 +117,7 @@ func createDb(filename string, force bool) error {
 	}
 	for _, record := range stateData[1:] {
 		_, err = db.Exec(
-			`INSERT INTO states (name, abbrev, created_at, modified_at)
+			`INSERT INTO states (name, abbrev, created_at, updated_at)
 			VALUES (?, ?, ?, ?)`, record[0], record[1], marchFirst, marchFirst)
 		if err != nil {
 			return err
@@ -115,7 +137,7 @@ func createDb(filename string, force bool) error {
 		_, err = db.Exec(
 			`INSERT INTO cities (
 				name, state_id, lat, lon, lat_sin, lat_cos, lon_sin, lon_cos,
-				created_at, modified_at)
+				created_at, updated_at)
 			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			record[0], record[1], lat, lon,
 			math.Sin(deg2rad(lat)), math.Cos(deg2rad(lat)),
@@ -133,7 +155,7 @@ func createDb(filename string, force bool) error {
 	for _, record := range userData[1:] {
 		_, err = db.Exec(
 			`INSERT INTO users (
-				first_name, last_name, created_at, modified_at)
+				first_name, last_name, created_at, updated_at)
 			VALUES (?, ?, ?, ?)`,
 			record[0], record[1], marchFirst, marchFirst)
 		if err != nil {
@@ -152,6 +174,12 @@ func initDB(ctx climax.Context) int {
 	if err != nil {
 		log.Errorln(err)
 		return 1
+	}
+
+	err = loadInitalData(cfg.DBPath)
+	if err != nil {
+		log.Errorln(err)
+		return 2
 	}
 
 	return 0
