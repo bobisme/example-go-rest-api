@@ -6,6 +6,8 @@ type Config struct {
 	DBPath string `toml:"db_path"`
 	// Port is the API Server HTTP port
 	Port int `toml:"port"`
+	// ReleaseMode is true if this is to be run in production
+	ReleaseMode bool
 }
 
 // Default returns a configuration with default values
