@@ -17,12 +17,15 @@ type State struct {
 // City model
 type City struct {
 	gorm.Model
-	Name           string
-	State          State
-	StateID        uint
-	Lat, Lon       float64
-	LatSin, LatCos float64
-	LonSin, LonCos float64
+	Name    string  `json:"name"`
+	State   State   `json:"-"`
+	StateID uint    `json:"stateId"`
+	Lat     float64 `json:"lat"`
+	Lon     float64 `json:"lon"`
+	LatSin  float64 `json:"-"`
+	LatCos  float64 `json:"-"`
+	LonSin  float64 `json:"-"`
+	LonCos  float64 `json:"-"`
 }
 
 // User model
