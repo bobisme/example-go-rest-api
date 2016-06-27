@@ -36,21 +36,14 @@ func loadTestData(filename string) {
 
 	_, err = db.Exec(
 		`INSERT INTO states (name, abbrev, created_at, updated_at)
-		VALUES (?, ?, ?, ?)`, "North Carolina", "NC", marchFirst, marchFirst)
-	check(err)
-	_, err = db.Exec(
-		`INSERT INTO states (name, abbrev, created_at, updated_at)
-		VALUES (?, ?, ?, ?)`, "South Carolina", "SC", marchFirst, marchFirst)
-	check(err)
-	_, err = db.Exec(
-		`UPDATE states SET deleted_at = ? WHERE abbrev = ?`, marchFirst, "SC")
+		VALUES (?, ?, ?, ?)`, "Westeros", "WS", marchFirst, marchFirst)
 	check(err)
 	// city
 	_, err = db.Exec(
 		`INSERT INTO cities (name, state_id, lat, lon,
 			lat_sin, lat_cos, lon_sin, lon_cos, created_at, updated_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		"Charlotte", 1, 35.2271, -80.8431,
+		"Winterfell", 1, 35.2271, -80.8431,
 		0.57681874832, 0.81687216354, -0.9872562543, 0.15913858219,
 		marchFirst, marchFirst)
 	check(err)
@@ -115,8 +108,7 @@ var _ = Describe("Api", func() {
 			var out []models.City
 			getJSON("/state/1/cities", &out)
 			Ω(len(out)).ShouldNot(Equal(0))
-			println(">>>>>>> cities", out)
-			Ω(out[0].Name).Should(Equal("Charlotte"))
+			Ω(out[0].Name).Should(Equal("Winterfell"))
 			Ω(out[0].Lat).Should(BeNumerically("~", 35.2271))
 			Ω(out[0].Lon).Should(BeNumerically("~", -80.8431))
 			Ω(out[0].StateID).Should(Equal(uint(1)))
