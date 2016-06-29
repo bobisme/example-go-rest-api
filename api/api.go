@@ -22,15 +22,8 @@ func jsonError(c *gin.Context, message string, err error) {
 	})
 }
 
-// GetRouter for the API Server router
-func GetRouter(cfg *conf.Config, db *gorm.DB) *gin.Engine {
-	// create a default router with logger and recovery
-	r := gin.Default()
-	r.GET("/", func(c *gin.Context) {
-		c.String(http.StatusOK, "HELLO")
-	})
-
-	r.GET("/state/:stateID/cities", func(c *gin.Context) {
+func getStateCitiesHandler(cfg *conf.Config, db *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
 		stateID, err := strconv.Atoi(c.Param("stateID"))
 		if err != nil {
 			jsonError(c, "Could not get id for state", err)
@@ -39,9 +32,11 @@ func GetRouter(cfg *conf.Config, db *gorm.DB) *gin.Engine {
 		var cities []models.City
 		db.Where("state_id = ?", stateID).Find(&cities)
 		c.JSON(http.StatusOK, cities)
-	})
+	}
+}
 
-	r.POST("/user/:userID/visits", func(c *gin.Context) {
+func getNewVisitHandler(cfg *conf.Config, db *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
 		var req VisitRequest
 		err := c.BindJSON(&req)
 		if err != nil {
@@ -55,9 +50,9 @@ func GetRouter(cfg *conf.Config, db *gorm.DB) *gin.Engine {
 		}
 
 		var user models.User
-		q := db.Find("id = ?", userID).First(&user)
+		q := db.Where("id = ?", userID).First(&user)
 		if err := q.Error; err != nil {
-			jsonError(c, "error looking up state", err)
+			jsonError(c, "error looking up user", err)
 			return
 		} else if q.RecordNotFound() {
 			jsonError(c, "user not found", nil)
@@ -67,7 +62,7 @@ func GetRouter(cfg *conf.Config, db *gorm.DB) *gin.Engine {
 		var city models.City
 
 		if req.City != "" && req.State != "" {
-			q := db.Find("abbrev = ?", req.State).First(state)
+			q := db.Where("abbrev = ?", req.State).First(&state)
 			if err := q.Error; err != nil {
 				jsonError(c, "error looking up state", err)
 				return
@@ -75,7 +70,8 @@ func GetRouter(cfg *conf.Config, db *gorm.DB) *gin.Engine {
 				jsonError(c, "state not found", nil)
 				return
 			}
-			q = db.Find("state_id = ?", state.ID).First(city)
+			q = db.Where(
+				"name = ? AND state_id = ?", req.City, state.ID).First(&city)
 			if err := q.Error; err != nil {
 				jsonError(c, "error looking up city", err)
 				return
@@ -85,8 +81,22 @@ func GetRouter(cfg *conf.Config, db *gorm.DB) *gin.Engine {
 			}
 			v := models.Visit{User: user, City: city}
 			db.Create(&v)
+			c.Status(http.StatusCreated)
+			return
 		}
+	}
+}
+
+// GetRouter for the API Server router
+func GetRouter(cfg *conf.Config, db *gorm.DB) *gin.Engine {
+	// create a default router with logger and recovery
+	r := gin.Default()
+	r.GET("/", func(c *gin.Context) {
+		c.String(http.StatusOK, "HELLO")
 	})
+
+	r.GET("/state/:stateID/cities", getStateCitiesHandler(cfg, db))
+	r.POST("/user/:userID/visits", getNewVisitHandler(cfg, db))
 
 	return r
 }

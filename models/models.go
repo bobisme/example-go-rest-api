@@ -62,8 +62,11 @@ func CheckPassword(db *gorm.DB, user *User, password string) error {
 // Visit model
 type Visit struct {
 	gorm.Model
-	User User
-	City City
+
+	User   User `json:"-"`
+	UserID uint
+	City   City `json:"-"`
+	CityID uint
 
 	Lat, Lon       float64
 	LatSin, LatCos float64
