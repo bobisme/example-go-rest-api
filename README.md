@@ -1,6 +1,13 @@
 Notes
 -----
 
+The required endpoints are implemented. Bad requests get a 400 repsponse
+with JSON error data. The schema is in [data/schema.sql](data/schema.sql).
+
+I only had a couple of days to work on this and I really wanted to
+emphasise thorough testing and things which I view as best practices.
+Using small subpackages and handy CLI tools are two of those.
+
 I chose **sqlite3** as my datastore for the sake of simplicity and
 portability.  I chose **gin** as my router because I've used it before.  It is
 fast, really simple, and uses a 0-allocation router. I used **ginkgo**
@@ -14,27 +21,31 @@ line option to generate a default config file. No package management.
 Run it
 ------
 
-### Setup
+1.  Setup
 
-    go get ./...
+        go get ./...
 
-### Test
+1.  Test
 
-    ginkgo -r
+        ginkgo -r
 
-![test](misc/testshot.png)
+    ![test](misc/testshot.png)
 
-### Build
+1.  Build
 
-    go build
+        go build
 
-### Generate your config file
+1.  Generate your config file
 
-    ./RestApiProject generate-config > config.toml
+        ./RestApiProject generate-config > config.toml
 
-### Run the server
+1.  Initialize the database
 
-    ./RestApiProject api-server
+        ./RestApiProject init-db
+
+1.  Run the server
+
+        ./RestApiProject api-server
 
 Bonus points
 ------------
