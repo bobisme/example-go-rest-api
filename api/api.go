@@ -10,6 +10,9 @@ import (
 	"github.com/jinzhu/gorm"
 )
 
+const defaultLimit = 100
+const maxLimit = 1000
+
 // VisitRequest is the struct for posting visit data
 type VisitRequest struct {
 	City  string `json:"city"`
@@ -22,6 +25,33 @@ func jsonError(c *gin.Context, message string, err error) {
 	})
 }
 
+func getLimitOffset(c *gin.Context) (uint, uint) {
+	limit := defaultLimit
+	limitStr := c.Query("limit")
+	limit, err := strconv.Atoi(limitStr)
+	if err != nil {
+		limit = defaultLimit
+	}
+	if limit > maxLimit {
+		limit = maxLimit
+	}
+	if limit < 1 {
+		limit = defaultLimit
+	}
+
+	offset := 0
+	offStr := c.Query("offset")
+	offset, err = strconv.Atoi(offStr)
+	if err != nil {
+		offset = 0
+	}
+	if offset < 0 {
+		offset = 0
+	}
+
+	return uint(limit), uint(offset)
+}
+
 func getStateCitiesHandler(cfg *conf.Config, db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		stateID, err := strconv.Atoi(c.Param("stateID"))
@@ -30,8 +60,14 @@ func getStateCitiesHandler(cfg *conf.Config, db *gorm.DB) gin.HandlerFunc {
 			return
 		}
 		var cities []models.City
-		db.Where("state_id = ?", stateID).Find(&cities)
-		c.JSON(http.StatusOK, cities)
+		limit, offset := getLimitOffset(c)
+		var count int
+		q := db.Model(&models.City{}).Where("state_id = ?", stateID)
+		q.Count(&count)
+		q.Limit(limit).Offset(offset).Find(&cities)
+		c.JSON(http.StatusOK, &MetaResponse{
+			limit, offset, uint(count), cities,
+		})
 	}
 }
 
@@ -125,17 +161,92 @@ func getDeleteVisitHandler(cfg *conf.Config, db *gorm.DB) gin.HandlerFunc {
 	}
 }
 
+// MetaResponse wraps the response and provides more info
+type MetaResponse struct {
+	Limit  uint
+	Offset uint
+	Count  uint
+	Data   interface{} `json:"data"`
+}
+
+func getVisitedCitiesHandler(cfg *conf.Config, db *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		user := getUser(c, db)
+		if user == nil {
+			return
+		}
+		var cities []models.City
+		limit, offset := getLimitOffset(c)
+		queryBase := `
+			FROM cities
+			WHERE cities.id IN (
+				SELECT DISTINCT city_id
+				FROM visits
+				WHERE user_id = ?
+			)
+		`
+		var count int
+		q := db.Raw(`SELECT COUNT(*) `+queryBase, user.ID).Count(&count)
+		if err := q.Error; err != nil {
+			jsonError(c, "error counting cities", err)
+			return
+		}
+		// not the most efficient method, but easiest to implement
+		q = db.Raw(
+			`SELECT cities.* `+queryBase+` LIMIT ? OFFSET ?`,
+			user.ID, limit, offset).Scan(&cities)
+		if err := q.Error; err != nil {
+			jsonError(c, "error looking up cities", err)
+			return
+		}
+		c.JSON(http.StatusOK, &MetaResponse{
+			limit, offset, uint(count), cities,
+		})
+	}
+}
+
+func getVisitedStatesHandler(cfg *conf.Config, db *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		user := getUser(c, db)
+		if user == nil {
+			return
+		}
+		var states []models.State
+		q := db.Raw(`
+			SELECT *
+			FROM states
+			WHERE id IN (
+				SELECT cities.state_id
+				FROM cities
+				LEFT JOIN visits ON cities.id = visits.city_id
+				WHERE visits.user_id = ?
+				GROUP BY cities.state_id
+			)
+		`, user.ID).Scan(&states)
+		if err := q.Error; err != nil {
+			jsonError(c, "error looking up states", err)
+			return
+		}
+		c.JSON(http.StatusOK, &states)
+	}
+}
+
 // GetRouter for the API Server router
 func GetRouter(cfg *conf.Config, db *gorm.DB) *gin.Engine {
 	// create a default router with logger and recovery
 	r := gin.Default()
+	SetRoutes(cfg, db, r)
+	return r
+}
+
+// SetRoutes for the API Server router
+func SetRoutes(cfg *conf.Config, db *gorm.DB, r *gin.Engine) {
 	r.GET("/", func(c *gin.Context) {
 		c.String(http.StatusOK, "HELLO")
 	})
-
 	r.GET("/state/:stateID/cities", getStateCitiesHandler(cfg, db))
 	r.POST("/user/:userID/visits", getNewVisitHandler(cfg, db))
 	r.DELETE("/user/:userID/visits/:visitID", getDeleteVisitHandler(cfg, db))
-
-	return r
+	r.GET("/user/:userID/visits/states", getVisitedStatesHandler(cfg, db))
+	r.GET("/user/:userID/visits", getVisitedCitiesHandler(cfg, db))
 }

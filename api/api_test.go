@@ -3,6 +3,7 @@ package api_test
 import (
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
@@ -85,6 +86,8 @@ func getRespBody(resp *http.Response) []byte {
 }
 
 var _ = Describe("Api", func() {
+	gin.SetMode(gin.ReleaseMode)
+
 	var (
 		r   *gin.Engine
 		ts  *httptest.Server
@@ -95,7 +98,12 @@ var _ = Describe("Api", func() {
 	get := func(url string) []byte {
 		resp, err := http.Get(ts.URL + url)
 		Ω(err).ShouldNot(HaveOccurred())
-		return getRespBody(resp)
+		body := getRespBody(resp)
+		if resp.StatusCode != 200 {
+			fmt.Println("ERROR >>>>>", string(body))
+		}
+		Ω(resp.StatusCode).Should(Equal(200))
+		return body
 	}
 
 	getJSON := func(url string, out interface{}) {
@@ -110,7 +118,9 @@ var _ = Describe("Api", func() {
 		loadTestData("test-rest-api.db")
 		db, err = gorm.Open("sqlite3", "test-rest-api.db")
 		Ω(err).ShouldNot(HaveOccurred())
-		r = GetRouter(cfg, db)
+		// don't use the default router. it's too noisy
+		r = gin.New()
+		SetRoutes(cfg, db, r)
 		ts = httptest.NewServer(r)
 	})
 
@@ -130,14 +140,47 @@ var _ = Describe("Api", func() {
 
 	Context("cities in state", func() {
 		It("should work", func() {
-			var out []models.City
+			var out struct {
+				Limit, Offset, Count int
+				Data                 []models.City
+			}
 			getJSON("/state/1/cities", &out)
-			Ω(len(out)).ShouldNot(Equal(0))
-			Ω(out[0].Name).Should(Equal("Winterfell"))
-			Ω(out[0].Lat).Should(BeNumerically("~", 35.2271))
-			Ω(out[0].Lon).Should(BeNumerically("~", -80.8431))
-			Ω(out[0].StateID).Should(Equal(uint(1)))
+			Ω(len(out.Data)).Should(Equal(2))
+			Ω(out.Limit).Should(Equal(100))
+			Ω(out.Offset).Should(Equal(0))
+			Ω(out.Count).Should(Equal(2))
+			Ω(out.Data[0].Name).Should(Equal("Winterfell"))
+			Ω(out.Data[0].Lat).Should(BeNumerically("~", 35.2271))
+			Ω(out.Data[0].Lon).Should(BeNumerically("~", -80.8431))
+			Ω(out.Data[0].StateID).Should(Equal(uint(1)))
 		})
+
+		It("limit works", func() {
+			var out struct {
+				Limit, Offset, Count int
+				Data                 []models.City
+			}
+			getJSON("/state/1/cities?limit=1", &out)
+			Ω(len(out.Data)).Should(Equal(1))
+			Ω(out.Limit).Should(Equal(1))
+			Ω(out.Offset).Should(Equal(0))
+			Ω(out.Count).Should(Equal(2))
+			Ω(out.Data[0].ID).Should(Equal(uint(1)))
+		})
+
+		It("offset works", func() {
+			var out struct {
+				Limit, Offset, Count int
+				Data                 []models.City
+			}
+			getJSON("/state/1/cities?offset=1", &out)
+			Ω(len(out.Data)).Should(Equal(1))
+			Ω(out.Limit).Should(Equal(100))
+			Ω(out.Offset).Should(Equal(1))
+			Ω(out.Count).Should(Equal(2))
+			Ω(out.Data[0].ID).Should(Equal(uint(2)))
+		})
+
 		It("should err if not an id", func() {
 			resp, err := http.Get(ts.URL + "/state/NO/cities")
 			Ω(err).ShouldNot(HaveOccurred())
@@ -279,5 +322,101 @@ var _ = Describe("Api", func() {
 			Entry("non-existant", `/user/1/visits/20`),
 			Entry("not a number", `/user/1/visits/NO`),
 		)
+	})
+	Context("cities visited", func() {
+		BeforeEach(func() {
+			visits := []string{
+				`{ "city": "Winterfell", "state": "WS" }`,
+				`{ "city": "Qarth", "state": "ES" }`,
+				`{ "city": "Kings Landing", "state": "WS" }`,
+				`{ "city": "Winterfell", "state": "WS" }`,
+				`{ "city": "Winterfell", "state": "WS" }`,
+				`{ "city": "Kings Landing", "state": "WS" }`,
+				`{ "city": "Qarth", "state": "ES" }`,
+			}
+			for _, data := range visits {
+				req := strings.NewReader(data)
+				resp, _ := http.Post(
+					ts.URL+`/user/1/visits`, "application/json", req)
+				body := getRespBody(resp)
+				var visit models.Visit
+				json.Unmarshal(body, &visit)
+			}
+		})
+
+		It("should be ok", func() {
+			var out struct {
+				Limit, Offset, Count int
+				Data                 []models.City
+			}
+			body := get("/user/1/visits")
+			json.Unmarshal(body, &out)
+			Ω(len(out.Data)).Should(Equal(3))
+			Ω(out.Limit).Should(Equal(100))
+			Ω(out.Offset).Should(Equal(0))
+			Ω(out.Count).Should(Equal(3))
+			Ω(out.Data[0].Name).Should(Equal("Winterfell"))
+			Ω(out.Data[0].Lat).Should(BeNumerically("~", 35.2271))
+			Ω(out.Data[0].Lon).Should(BeNumerically("~", -80.8431))
+			Ω(out.Data[0].StateID).Should(Equal(uint(1)))
+		})
+
+		It("accepts limit", func() {
+			var out struct {
+				Limit, Offset, Count int
+				Data                 []models.City
+			}
+			body := get("/user/1/visits?limit=2")
+			json.Unmarshal(body, &out)
+			Ω(len(out.Data)).Should(Equal(2))
+			Ω(out.Limit).Should(Equal(2))
+			Ω(out.Offset).Should(Equal(0))
+			Ω(out.Count).Should(Equal(3))
+			Ω(out.Data[0].ID).Should(Equal(uint(1)))
+		})
+
+		It("accepts offset", func() {
+			var out struct {
+				Limit, Offset, Count int
+				Data                 []models.City
+			}
+			body := get("/user/1/visits?offset=1")
+			json.Unmarshal(body, &out)
+			Ω(len(out.Data)).Should(Equal(2))
+			Ω(out.Limit).Should(Equal(100))
+			Ω(out.Offset).Should(Equal(1))
+			Ω(out.Count).Should(Equal(3))
+			Ω(out.Data[0].ID).Should(Equal(uint(2)))
+		})
+	})
+	Context("states visited", func() {
+		BeforeEach(func() {
+			visits := []string{
+				`{ "city": "Winterfell", "state": "WS" }`,
+				`{ "city": "Qarth", "state": "ES" }`,
+				`{ "city": "Kings Landing", "state": "WS" }`,
+				`{ "city": "Winterfell", "state": "WS" }`,
+				`{ "city": "Winterfell", "state": "WS" }`,
+				`{ "city": "Kings Landing", "state": "WS" }`,
+				`{ "city": "Qarth", "state": "ES" }`,
+			}
+			for _, data := range visits {
+				req := strings.NewReader(data)
+				resp, _ := http.Post(
+					ts.URL+`/user/1/visits`, "application/json", req)
+				body := getRespBody(resp)
+				var visit models.Visit
+				json.Unmarshal(body, &visit)
+			}
+		})
+		It("should be ok", func() {
+			var out []models.State
+			body := get("/user/1/visits/states")
+			json.Unmarshal(body, &out)
+			Ω(len(out)).Should(Equal(2))
+			Ω(out[0].Name).Should(Equal("Westeros"))
+			Ω(out[0].Abbrev).Should(Equal("WS"))
+			Ω(out[0].ID).Should(Equal(uint(1)))
+		})
 	})
 })

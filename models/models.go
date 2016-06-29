@@ -36,6 +36,7 @@ type User struct {
 
 	Email        string
 	PasswordHash []byte
+	Visits       []Visit
 }
 
 // SetPassword for the user
