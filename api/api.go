@@ -35,6 +35,27 @@ func getStateCitiesHandler(cfg *conf.Config, db *gorm.DB) gin.HandlerFunc {
 	}
 }
 
+// parse and verify that the user exists
+// sends a json error response and returns 0 if invalid
+func getUser(c *gin.Context, db *gorm.DB) *models.User {
+	userID, err := strconv.Atoi(c.Param("userID"))
+	if err != nil {
+		jsonError(c, "could not parse user id", err)
+		return nil
+	}
+
+	user := &models.User{}
+	q := db.Where("id = ?", userID).First(user)
+	if err := q.Error; err != nil {
+		jsonError(c, "error looking up user", err)
+		return nil
+	} else if q.RecordNotFound() {
+		jsonError(c, "user not found", nil)
+		return nil
+	}
+	return user
+}
+
 func getNewVisitHandler(cfg *conf.Config, db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var req VisitRequest
@@ -43,23 +64,12 @@ func getNewVisitHandler(cfg *conf.Config, db *gorm.DB) gin.HandlerFunc {
 			jsonError(c, "could not understand your data", err)
 			return
 		}
-		userID, err := strconv.Atoi(c.Param("userID"))
-		if err != nil {
-			jsonError(c, "could not parse user id", err)
-			return
-		}
-
-		var user models.User
-		q := db.Where("id = ?", userID).First(&user)
-		if err := q.Error; err != nil {
-			jsonError(c, "error looking up user", err)
-			return
-		} else if q.RecordNotFound() {
-			jsonError(c, "user not found", nil)
-			return
-		}
 		var state models.State
 		var city models.City
+		user := getUser(c, db)
+		if user == nil {
+			return
+		}
 
 		if req.City != "" && req.State != "" {
 			q := db.Where("abbrev = ?", req.State).First(&state)
@@ -79,11 +89,39 @@ func getNewVisitHandler(cfg *conf.Config, db *gorm.DB) gin.HandlerFunc {
 				jsonError(c, "city not found", nil)
 				return
 			}
-			v := models.Visit{User: user, City: city}
+			v := models.Visit{User: *user, City: city}
 			db.Create(&v)
-			c.Status(http.StatusCreated)
+			c.JSON(http.StatusCreated, &v)
 			return
 		}
+	}
+}
+
+func getDeleteVisitHandler(cfg *conf.Config, db *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		user := getUser(c, db)
+		if user == nil {
+			return
+		}
+		visitID, err := strconv.Atoi(c.Param("visitID"))
+		if err != nil {
+			jsonError(c, "could not parse visit id", err)
+			return
+		}
+		var visit models.Visit
+		q := db.Where("id = ?", visitID).First(&visit)
+		if err := q.Error; err != nil {
+			jsonError(c, "error looking up visit", err)
+			return
+		} else if q.RecordNotFound() {
+			jsonError(c, "visit not found", nil)
+			return
+		}
+		if err := db.Delete(&visit).Error; err != nil {
+			jsonError(c, "error removing visit", err)
+			return
+		}
+		c.Status(http.StatusNoContent)
 	}
 }
 
@@ -97,6 +135,7 @@ func GetRouter(cfg *conf.Config, db *gorm.DB) *gin.Engine {
 
 	r.GET("/state/:stateID/cities", getStateCitiesHandler(cfg, db))
 	r.POST("/user/:userID/visits", getNewVisitHandler(cfg, db))
+	r.DELETE("/user/:userID/visits/:visitID", getDeleteVisitHandler(cfg, db))
 
 	return r
 }

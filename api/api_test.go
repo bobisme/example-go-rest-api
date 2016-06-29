@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -157,9 +158,9 @@ var _ = Describe("Api", func() {
 			Ω(resp.StatusCode).Should(Equal(201))
 			var visit models.Visit
 			db.Model(&models.Visit{}).First(&visit)
-			var visitCount int
 			Ω(visit.CityID).Should(Equal(uint(1)))
 			Ω(visit.UserID).Should(Equal(uint(1)))
+			var visitCount int
 			db.Model(&models.Visit{}).Count(&visitCount)
 			Ω(visitCount).Should(Equal(1))
 
@@ -219,5 +220,64 @@ var _ = Describe("Api", func() {
 			Ω(err).ShouldNot(HaveOccurred())
 			Ω(resp.StatusCode).Should(Equal(400))
 		})
+	})
+
+	Context("delete visit", func() {
+		var ids []uint
+		BeforeEach(func() {
+			ids = []uint{}
+			visits := []string{
+				`{ "city": "Winterfell", "state": "WS" }`,
+				`{ "city": "Qarth", "state": "ES" }`,
+				`{ "city": "Kings Landing", "state": "WS" }`,
+			}
+			for _, data := range visits {
+				req := strings.NewReader(data)
+				resp, _ := http.Post(
+					ts.URL+`/user/1/visits`, "application/json", req)
+				body := getRespBody(resp)
+				var visit models.Visit
+				json.Unmarshal(body, &visit)
+				ids = append(ids, visit.ID)
+			}
+		})
+
+		It("should be ok", func() {
+			var visitCount int
+			db.Model(&models.Visit{}).Count(&visitCount)
+			Ω(visitCount).Should(Equal(3))
+
+			id := strconv.Itoa(int(ids[1]))
+			req, err := http.NewRequest("DELETE", ts.URL+`/user/1/visits/`+id, nil)
+			Ω(err).ShouldNot(HaveOccurred())
+			resp, err := http.DefaultClient.Do(req)
+			Ω(err).ShouldNot(HaveOccurred())
+			Ω(resp.StatusCode).Should(Equal(204))
+			db.Model(&models.Visit{}).Count(&visitCount)
+			Ω(visitCount).Should(Equal(2))
+		})
+
+		DescribeTable("fails on invalid user",
+			func(url string) {
+				req, _ := http.NewRequest("DELETE", ts.URL+url, nil)
+				resp, _ := http.DefaultClient.Do(req)
+				Ω(resp.StatusCode).Should(Equal(400))
+			},
+			Entry("0", `/user/0/visits/2`),
+			Entry("non-existant", `/user/20/visits/2`),
+			Entry("not a number", `/user/NO/visits/2`),
+			Entry("blank", `/user//visits/2`),
+		)
+
+		DescribeTable("fails on invalid visit",
+			func(url string) {
+				req, _ := http.NewRequest("DELETE", ts.URL+url, nil)
+				resp, _ := http.DefaultClient.Do(req)
+				Ω(resp.StatusCode).Should(Equal(400))
+			},
+			Entry("0", `/user/1/visits/0`),
+			Entry("non-existant", `/user/1/visits/20`),
+			Entry("not a number", `/user/1/visits/NO`),
+		)
 	})
 })
