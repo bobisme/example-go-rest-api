@@ -125,8 +125,11 @@ func getNewVisitHandler(cfg *conf.Config, db *gorm.DB) gin.HandlerFunc {
 				jsonError(c, "city not found", nil)
 				return
 			}
-			v := models.Visit{User: *user, City: city}
-			db.Create(&v)
+			v := models.Visit{UserID: user.ID, City: city}
+			if err := db.Create(&v).Error; err != nil {
+				jsonError(c, "error saving visit", err)
+				return
+			}
 			c.JSON(http.StatusCreated, &v)
 			return
 		}
@@ -163,9 +166,9 @@ func getDeleteVisitHandler(cfg *conf.Config, db *gorm.DB) gin.HandlerFunc {
 
 // MetaResponse wraps the response and provides more info
 type MetaResponse struct {
-	Limit  uint
-	Offset uint
-	Count  uint
+	Limit  uint        `json:"limit"`
+	Offset uint        `json:"offset"`
+	Count  uint        `json:"count"`
 	Data   interface{} `json:"data"`
 }
 

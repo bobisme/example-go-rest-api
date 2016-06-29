@@ -2,21 +2,30 @@ package models
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/jinzhu/gorm"
 	"golang.org/x/crypto/bcrypt"
 )
 
+// Model is a better base model because it aknowledges JSON
+type Model struct {
+	ID        uint       `json:"id" gorm:"primary_key"`
+	CreatedAt time.Time  `json:"-"`
+	UpdatedAt time.Time  `json:"-"`
+	DeletedAt *time.Time `json:"-" sql:"index"`
+}
+
 // State model*
 type State struct {
-	gorm.Model
-	Name   string
-	Abbrev string
+	Model
+	Name   string `json:"name"`
+	Abbrev string `json:"abbrev"`
 }
 
 // City model
 type City struct {
-	gorm.Model
+	Model
 	Name    string  `json:"name"`
 	State   State   `json:"-"`
 	StateID uint    `json:"stateId"`
@@ -30,13 +39,13 @@ type City struct {
 
 // User model
 type User struct {
-	gorm.Model
-	FirstName string
-	LastName  string
+	Model
+	FirstName string `json:"firstName"`
+	LastName  string `json:"lastName"`
 
-	Email        string
-	PasswordHash []byte
-	Visits       []Visit
+	Email        string  `json:"email"`
+	PasswordHash []byte  `json:"-"`
+	Visits       []Visit `json:"visits"`
 }
 
 // SetPassword for the user
@@ -62,15 +71,16 @@ func CheckPassword(db *gorm.DB, user *User, password string) error {
 
 // Visit model
 type Visit struct {
-	gorm.Model
+	Model
 
 	User   User `json:"-"`
-	UserID uint
+	UserID uint `json:"userId"`
 	City   City `json:"-"`
-	CityID uint
+	CityID uint `json:"cityId"`
 
-	Lat, Lon       float64
-	LatSin, LatCos float64
-	LonSin, LonCos float64
-	VisitMethod    string
+	Lat            float64 `json:"lat"`
+	Lon            float64 `json:"lon"`
+	LatSin, LatCos float64 `json:"-"`
+	LonSin, LonCos float64 `json:"-"`
+	VisitMethod    string  `json:"visitMethod"`
 }
